@@ -37,7 +37,7 @@ if(analogInput < triggervalue1 && tmpHigh == 1){
   tmpLow = 1;
 
 }
-
+//;lkj;lkj;lkj;lkj
 if(analogInput > triggervalue2 && tmpLow == 1){
   period = timr;
   tempheartRate = 60/(period/1000);
