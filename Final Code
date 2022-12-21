@@ -1,0 +1,167 @@
+#include <M5Stack.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+const int AmotorPin = 1;
+const int FmotorPin = 2;
+const int freq = 1000;
+const int Amotor = 1;
+const int Fmotor = 2;
+const int resolution = 8;
+
+
+void updateMotor(int dutyCycle, int channel) {   //(dutyCycle percentage, Amotor/Fmotor)
+  int analogValue = dutyCycle * 255 / 100;    //convert the dutyCycle to an analog value
+  ledcWrite(channel, analogValue);    //set the PWM output on the given pin
+}
+
+int getHeartRate(){
+
+    int sensorPin = 36;       // define which pin is the input
+    int tmpHigh = 0;
+    int tmpLow = 0;
+    float timr = 0;
+    float period = 0;
+    float heartRate = 0;              //This is the value of the heartrate which can be used in the algorithm code.
+    float tempheartRate = 0;
+    float triggervalue1 = 100;      // below this value the signal is considered to be voltage minimum (including error margin)
+    float triggervalue2 = 4000;     // above this value the signal is considered to be voltage peak (including error margin)
+    float analogInput = 50; 
+
+    analogInput = analogRead(sensorPin);          // read the input and store it in variable analogInput
+
+    if(analogInput > triggervalue2 && tmpHigh == 0){
+        timr = 0;
+        tmpHigh = 1;
+    }
+
+    delay(2);                     //these two lines are the timer
+    timr = timr + 2;
+
+    if(analogInput < triggervalue1 && tmpHigh == 1){
+        tmpLow = 1;
+    }
+
+    if(analogInput > triggervalue2 && tmpLow == 1){
+        period = timr;
+        tempheartRate = 60/(period/1000);
+        tmpLow = 0;
+        tmpHigh = 0;
+
+    }
+    
+    if (heartRate > 55 && heartRate < 240){       //remove outliers
+        heartRate = tempheartRate;
+    }
+    
+    return heartRate;
+}
+
+
+void setup() {
+
+    M5.begin();
+
+    int arrayOldHB[5];
+    for (int i = 0; i < 5; i++) {
+        arrayOldHB[i] = getHeartRate();
+    }
+
+    int tmp3 = 0;
+
+    for(int i = 0; i<5; i++){
+        tmp3 += arrayNewHB[i];
+    }
+
+    int HBOldAvg = tmp3/5;
+
+
+    int arrayNewHB[5];
+    int HBNewAvg = 0;
+    int dutyCycleA = 0;
+    int dutyCycleF = 0;
+    
+    //PWM motor setup
+    ledcSetup(Amotor, freq, resolution);`   //Setup the output channel for the Amplitude motor
+    ledcSetup(Fmotor, freq, resolution);    //setup the output channel for the Frequency motor
+    ledcAttachPin(AmotorPin, Amotor);   //connect the Amotor channel to the Amotor pin
+    ledcAttachPin(FmotorPin, Fmotor);   //connect the Fmotor channel to the Fmotor pin
+
+    int Frequency = 80;
+    int Amplitude = 80;
+}
+
+
+loop(){
+
+    if (Amplitude != 0) {
+        Amplitude = Amplitude - 20;
+    } else {
+        while (Amplitude == 0) {
+            for(i = Frequency; i != 0; i = i - 20) {
+                Frequency = i - 20;
+                updateMotor(Frequency, Fmotor);
+                delay(5000);
+            }
+            delay(1000);
+        }
+    }
+
+    while(Amplitude == 0 && Frequency == 0) {
+        delay(1000);
+    }
+
+    updateMotor(Frequency, Fmotor);
+    updateMotor(Amplitude, Amotor);
+
+    //set delay to wait until system becomes stable
+    delay(1000);
+
+    //Take values for new heartbeat
+
+    int dontProceed = 1;
+
+    while (dontProceed == 1) {
+
+        for(int i = 0; i<5; i++){
+            arrayNewHB[i] = getHeartRate();
+        }
+
+        //Average of new hearbeat array
+
+        int tmp2 = 0;
+
+        for(int i = 0; i<5; i++){
+            tmp2 += arrayNewHB[i];
+        }
+
+        HBNewAvg = tmp2/5;
+
+
+    
+        differenceHB = arrayNewHB[0] - arrayNewHB[5]        //-10/10
+    
+        if(differenceHB<10 && differenceHB>-10){
+            dontProceed = 0;
+        }
+
+    }
+
+
+    //Compare averages
+
+    if(HBNewAvg > (HBOldAvg - 5)) {
+        Amplitude = Amplitude+20;
+        Frequency = Frequency-20;
+    }
+
+
+    HBOldAvg = HBNewAvg;
+}
+
+
+
+
+
