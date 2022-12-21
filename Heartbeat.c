@@ -24,13 +24,12 @@ analogInput = analogRead(sensorPin);          // read the input and store it in 
 
 if(analogInput > triggervalue2 && tmpHigh == 0){
 
-  timr = 0;
+  timr = millis();
   tmpHigh = 1;
 
 }
 
-delay(2);                     //these two lines are the timer
-timr = timr + 2;
+
 
 if(analogInput < triggervalue1 && tmpHigh == 1){
 
@@ -39,7 +38,7 @@ if(analogInput < triggervalue1 && tmpHigh == 1){
 }
 //;lkj;lkj;lkj;lkj
 if(analogInput > triggervalue2 && tmpLow == 1){
-  period = timr;
+  period = millis() - timr;
   tempheartRate = 60/(period/1000);
   tmpLow = 0;
   tmpHigh = 0;
