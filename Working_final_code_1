@@ -1,0 +1,172 @@
+#include <M5Stack.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+int Frequency = 85;
+int Amplitude = 85;
+
+float oldHB = 0;
+float newHB = 0;
+
+int timedelay = 12000;
+bool prgact = 0;
+
+const int AmotorPin = 1;
+const int FmotorPin = 2;
+const int freq = 1000;
+const int Amotor = 1;
+const int Fmotor = 2;
+const int resolution = 8;
+
+
+void updateMotor(int dutyCycle, int channel) {   //(dutyCycle percentage, Amotor/Fmotor)
+  int analogValue = dutyCycle * 255 / 100;    //convert the dutyCycle to an analog value
+  ledcWrite(channel, analogValue);    //set the PWM output on the given pin
+}
+
+float getHeartBeat(){
+
+    int sensorPin = 26;       // define which pin is the input
+    int tmpHigh = 0;
+    int tmpLow = 0;
+    float timr = 0;
+    float period = 0;
+    float heartRate = 0;              //This is the value of the heartrate which can be used in the algorithm code.
+    float triggervalue1 = 1000;      // below this value the signal is considered to be voltage minimum (including error margin)
+    float triggervalue2 = 2000;     // above this value the signal is considered to be voltage peak (including error margin)
+    float analogInput = 50; 
+
+    while(1) {
+    analogInput = analogRead(sensorPin);          // read the input and store it in variable analogInput
+
+    if(analogInput > triggervalue2 && tmpHigh == 0){
+        timr = millis();
+        tmpHigh = 1;
+    }
+
+    if(analogInput < triggervalue1 && tmpHigh == 1){
+        tmpLow = 1;
+    }
+
+    if(analogInput > triggervalue2 && tmpLow == 1){
+        period = millis() - timr;
+        heartRate = 60/(period/1000);
+        tmpLow = 0;
+        tmpHigh = 0;
+
+    }
+    
+    if (heartRate > 55 && heartRate < 240){       //remove outliers
+        return heartRate;
+    }
+    
+    }
+}
+
+float getHeartRate() {
+  float HBvalues[3] = { 0 };
+  float diff = 11, diff1 = 11, diff2 = 11, diff3 = 11;
+  int restart = 1;
+
+  while(restart) {
+    for (int i = 0; i < 3; i++) {
+      HBvalues[i] = getHeartBeat();
+    }
+    diff1 = fabs(HBvalues[0] - HBvalues[1]);
+    diff2 = fabs(HBvalues[1] - HBvalues[2]);
+    diff3 = fabs(HBvalues[2] - HBvalues[0]);
+    if (diff1 > diff2) {
+      diff = diff1;
+    } else {
+      diff = diff2;
+    }
+    if (diff3 > diff) {
+      diff = diff3;
+    }
+    if (diff < 10) {
+      restart = 0;
+    } else {
+      if (prgact == 1) M5.Lcd.printf("Heartbeat outlier found!!\n");
+    }
+  }
+  if (prgact == 1) M5.Lcd.printf("Heartbeat = %f\n", HBvalues[0]);
+  return HBvalues[0];
+  
+}
+
+void setup() {
+
+    M5.begin();
+    M5.Lcd.setTextWrap(true, true);
+    M5.Lcd.setTextSize(1);
+    
+    //PWM motor setup
+    ledcSetup(Amotor, freq, resolution);    //Setup the output channel for the Amplitude motor
+    ledcSetup(Fmotor, freq, resolution);    //setup the output channel for the Frequency motor
+    ledcAttachPin(AmotorPin, Amotor);   //connect the Amotor channel to the Amotor pin
+    ledcAttachPin(FmotorPin, Fmotor);   //connect the Fmotor channel to the Fmotor pin
+
+    M5.Lcd.printf("Press button to start program\n");
+
+    while(!M5.BtnA.read()) {
+      delay(10);
+    }
+    M5.Lcd.printf("Starting program\n");
+
+    updateMotor(Frequency, Fmotor);
+    updateMotor(Amplitude, Amotor);
+
+    delay(1000);
+
+    while(oldHB < 210) {
+      oldHB = getHeartRate();
+    }
+    M5.Lcd.printf("Program started!\n");
+    prgact = 1;
+    
+}
+
+
+void loop(){
+
+    if (Amplitude > 10) {
+        Amplitude = Amplitude - 20;
+    } else {
+        while (Amplitude <= 10) {
+            for(int i = Frequency; i > 10; i = i - 20) {
+                Frequency = i - 20;
+                updateMotor(Frequency, Fmotor);
+                delay(timedelay/3);
+            }
+            delay(1000);
+            M5.Lcd.printf("Program complete!\n");
+            return;
+        }
+    }
+
+    updateMotor(Frequency, Fmotor);
+    updateMotor(Amplitude, Amotor);
+
+    delay(timedelay);
+
+    newHB = getHeartRate();
+
+    M5.Lcd.printf("New Heartbeat is %f, Old was %f\n", newHB, oldHB);
+
+    if (newHB > (oldHB - 5)) {
+      M5.Lcd.printf("Wrong path taken, going back\n");
+      Amplitude = Amplitude + 20;
+      updateMotor(Amplitude, Amotor);
+      Frequency = Frequency - 20;
+      updateMotor(Frequency, Fmotor);
+      
+      delay(timedelay);
+      newHB = getHeartRate();
+    }
+
+    oldHB = newHB;
+
+
+}
