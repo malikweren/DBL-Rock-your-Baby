@@ -1,0 +1,270 @@
+#include <M5Stack.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+int Frequency = 85;
+int Amplitude = 85;
+
+//Arrays to save the path taken
+int frequencyArray[100] = {0};
+int amplitudeArray[100] = {0};
+int stepnr = 1;
+
+float oldHB = 0;
+float newHB = 0;
+int outliernr = 0;
+
+int timedelay = 12000;
+bool prgact = 0;    //indicate wether or not the program has been activated
+
+const int AmotorPin = 1;
+const int FmotorPin = 2;
+const int freq = 1000;
+const int Amotor = 1;
+const int Fmotor = 2;
+const int resolution = 8;
+
+
+void updateMotor(int dutyCycle, int channel) {   //(dutyCycle percentage, Amotor/Fmotor)
+  int analogValue = dutyCycle * 255 / 100;    //convert the dutyCycle to an analog value
+  ledcWrite(channel, analogValue);    //set the PWM output on the given pin
+}
+
+float getHeartBeat(){
+
+    int sensorPin = 26;       // define which pin is the input
+    int tmpHigh = 0;
+    int tmpLow = 0;
+    float timr = 0;
+    float period = 0;
+    float heartRate = 0;              //This is the value of the heartrate which can be used in the algorithm code.
+    float triggervalue1 = 1000;      // below this value the signal is considered to be voltage minimum (including error margin)
+    float triggervalue2 = 2000;     // above this value the signal is considered to be voltage peak (including error margin)
+    float analogInput = 50; 
+
+    while(1) {
+    analogInput = analogRead(sensorPin);          // read the input and store it in variable analogInput
+
+    if(analogInput > triggervalue2 && tmpHigh == 0){
+        timr = millis();
+        tmpHigh = 1;
+    }
+
+    if(analogInput < triggervalue1 && tmpHigh == 1){
+        tmpLow = 1;
+    }
+
+    if(analogInput > triggervalue2 && tmpLow == 1){
+        period = millis() - timr;
+        heartRate = 60/(period/1000);
+        tmpLow = 0;
+        tmpHigh = 0;
+
+    }
+    
+    if (heartRate > 55 && heartRate < 245){       //remove outliers
+        return heartRate;
+    }
+    
+    }
+}
+
+void printHeartrate (float HR) {      //print the heartrate value at the top of the screen
+  int cursX = M5.Lcd.getCursorX();
+  int cursY = M5.Lcd.getCursorY();
+
+  M5.Lcd.setCursor(0,0);    //go to the top of the screen
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.fillRect(0,0,320,16,TFT_BLACK);
+  M5.Lcd.printf("Heartrate = %.0f  ", HR);
+  M5.Lcd.setCursor(cursX,cursY);    //go back to the previous position on the screen
+  M5.Lcd.setTextSize(1);
+  return;
+}
+
+float getHeartRate() {    //take 3 heartbeat values, check if they are consistent, and return the average
+  float HBvalues[3] = { 0 };
+  float diff = 11, diff1 = 11, diff2 = 11, diff3 = 11;
+  int restart = 1;
+
+  while(restart != 0) {
+    for (int i = 0; i < 3; i++) {   //put 3 heartbeat values into the HBvalues array
+      HBvalues[i] = getHeartBeat();
+    }
+    diff1 = fabs(HBvalues[0] - HBvalues[1]);    //calculate the differences between heartbeat values
+    diff2 = fabs(HBvalues[1] - HBvalues[2]);
+    diff3 = fabs(HBvalues[2] - HBvalues[0]);
+    if (diff1 > diff2) {      //calculate the largest difference
+      diff = diff1;
+    } else {
+      diff = diff2;
+    }
+    if (diff3 > diff) {
+      diff = diff3;
+    }
+    if (diff < 8) {    //if the largest difference is greater than 8, take 3 new values
+      restart = 0;
+    } else {
+      if (prgact == 1) {
+        outliernr++;
+        if (M5.Lcd.getCursorY() > 230) clearScreen();
+        M5.Lcd.setTextColor(TFT_CYAN);
+        M5.Lcd.printf("Heartbeat outlier found nr ");
+        M5.Lcd.setTextColor(TFT_WHITE);
+        M5.Lcd.printf("%d\n", outliernr);
+      }
+    }
+  }
+  float HBavg = (HBvalues[0] + HBvalues[1] + HBvalues[2])/3;    //calculate and return the average
+  printHeartrate(HBavg);
+  return HBavg;
+  
+}
+
+void clearScreen() {    //clear the screen and reprint the hline and heartrate
+  M5.Lcd.clear();
+  M5.Lcd.drawFastHLine(0,20,320,TFT_WHITE);
+  M5.Lcd.setCursor(0,24);
+  printHeartrate(newHB);
+}
+
+void savePath(){    //save the path location for every correct step taken
+  frequencyArray[stepnr] = Frequency - 5;
+  amplitudeArray[stepnr] = Amplitude - 5;
+  stepnr++;
+}
+
+void takePath(){    //go down the path previously saved in the arrays
+  int test = 0;
+  int stp = 1;
+  outliernr = 0;
+
+  clearScreen();    //clear the screen
+  M5.Lcd.printf("Starting program\n");
+  
+  updateMotor(85, Fmotor);
+  updateMotor(85, Amotor);
+
+  delay(4500);
+
+  M5.Lcd.printf("Program started!\n");
+
+      //go down each step of the previously saved path with a slight delay in between each step
+  for (stp = 1; frequencyArray[stp] > 5 || amplitudeArray[stp] > 5; stp++){
+    Frequency = frequencyArray[stp];
+    Amplitude = amplitudeArray[stp];
+    updateMotor(Frequency, Fmotor);
+    updateMotor(Amplitude, Amotor);
+
+    getHeartRate();
+    delay(2000);
+  }
+  //last step that doesn't get executed by the for-loop
+  Frequency = frequencyArray[stp];
+  Amplitude = amplitudeArray[stp];
+  updateMotor(Frequency, Fmotor);
+  updateMotor(Amplitude, Amotor);
+  
+}
+
+void setup() {
+
+    M5.begin();
+    M5.Lcd.setTextWrap(true, true);
+    M5.Lcd.setTextSize(1);
+    clearScreen();
+    
+    //PWM motor setup
+    ledcSetup(Amotor, freq, resolution);    //Setup the output channel for the Amplitude motor
+    ledcSetup(Fmotor, freq, resolution);    //setup the output channel for the Frequency motor
+    ledcAttachPin(AmotorPin, Amotor);   //connect the Amotor channel to the Amotor pin
+    ledcAttachPin(FmotorPin, Fmotor);   //connect the Fmotor channel to the Fmotor pin
+
+    //Set the first step in the array to the top right squarer
+    frequencyArray[0] = 85;
+    amplitudeArray[0] = 85;
+
+    M5.Lcd.printf("Press button 1 to start program\n");
+
+    //wait until the first button is pressed to continue
+    while(!M5.BtnA.read()) {
+      delay(10);
+    }
+    M5.Lcd.printf("Starting program\n");
+
+    updateMotor(Frequency, Fmotor);
+    updateMotor(Amplitude, Amotor);
+
+    delay(5000);
+
+    //wait until the heartrate reaches above 210, which is the correct value for the maximum stress
+    while(oldHB < 210) {
+      oldHB = getHeartRate();
+    }
+    M5.Lcd.printf("Program started!\n");
+    prgact = 1;   //indicate that the program has been activated
+    
+}
+
+
+void loop(){    //main program loop
+
+    if (Amplitude > 10) {   //decrease amplitude as a first step, if it is not already at the lowest value
+        Amplitude = Amplitude - 20;
+    } else {
+        while (Amplitude <= 10) { //if amplitude is at it's lowest value, decrease frequency without checking the heartrate
+            for(int i = Frequency; i > 10; i = i - 20) {
+                Frequency = i - 20;
+                updateMotor(Frequency, Fmotor);
+                savePath();
+                delay(timedelay/3);
+            }
+            delay(1000);
+            while(1) {
+              clearScreen();
+              M5.Lcd.printf("Program complete!\nPress button 3 to restart\n");
+              while(!M5.BtnC.read()) {
+                delay(10);
+              }
+              takePath();
+              delay(100);
+            }
+            return;
+        }
+    }
+
+    updateMotor(Frequency, Fmotor);
+    updateMotor(Amplitude, Amotor);
+
+    if (Frequency > 10) {
+      delay(timedelay);
+      newHB = getHeartRate();
+
+      if (newHB > (oldHB - 10)) {
+        if (M5.Lcd.getCursorY() > 222) clearScreen();
+        M5.Lcd.printf("New Heartbeat is %.0f, Old was %.0f\n", newHB, oldHB);
+        M5.Lcd.printf("Wrong path taken, going back\n");
+        Amplitude = Amplitude + 20;
+        updateMotor(Amplitude, Amotor);
+        delay(500);
+        Frequency = Frequency - 20;
+        updateMotor(Frequency, Fmotor);
+        savePath();
+      
+        delay(timedelay);
+        newHB = getHeartRate();
+      } else {
+        if (M5.Lcd.getCursorY() > 222) clearScreen();
+        M5.Lcd.printf("New Heartbeat is %.0f, Old was %.0f\n", newHB, oldHB);
+        M5.Lcd.printf("Correct path taken, continuing\n");
+        savePath();
+      }
+   } else {
+    delay(timedelay/3);
+   }
+
+    oldHB = newHB;
+
+}
