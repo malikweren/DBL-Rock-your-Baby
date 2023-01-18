@@ -107,12 +107,12 @@ float getHeartRate() {    //take 3 heartbeat values, check if they are consisten
     if (diff < 8) {    //if the largest difference is greater than 8, take 3 new values
       restart = 0;
     } else {
-      if (prgact == 1) {
+      if (prgact == 1) {    //only display the heartbeat on the screen if the program has started
         outliernr++;
         if (M5.Lcd.getCursorY() > 230) clearScreen();
-        M5.Lcd.setTextColor(TFT_CYAN);
+        M5.Lcd.setTextColor(TFT_CYAN);    //CYAN means red color
         M5.Lcd.printf("Heartbeat outlier found nr ");
-        M5.Lcd.setTextColor(TFT_WHITE);
+        M5.Lcd.setTextColor(TFT_WHITE);   //white means black color
         M5.Lcd.printf("%d\n", outliernr);
       }
     }
@@ -123,7 +123,7 @@ float getHeartRate() {    //take 3 heartbeat values, check if they are consisten
   
 }
 
-void clearScreen() {    //clear the screen and reprint the hline and heartrate
+void clearScreen() {    //clear the screen and reprint the horizontal line and heartrate
   M5.Lcd.clear();
   M5.Lcd.drawFastHLine(0,20,320,TFT_WHITE);
   M5.Lcd.setCursor(0,24);
@@ -161,7 +161,7 @@ void takePath(){    //go down the path previously saved in the arrays
     getHeartRate();
     delay(2000);
   }
-  //last step that doesn't get executed by the for-loop
+  //last step that doesn't get executed in the for-loop
   Frequency = frequencyArray[stp];
   Amplitude = amplitudeArray[stp];
   updateMotor(Frequency, Fmotor);
@@ -171,7 +171,7 @@ void takePath(){    //go down the path previously saved in the arrays
 
 void setup() {
 
-    M5.begin();
+    M5.begin();       //initial setup commands to start up the M5stack
     M5.Lcd.setTextWrap(true, true);
     M5.Lcd.setTextSize(1);
     clearScreen();
@@ -193,13 +193,15 @@ void setup() {
       delay(10);
     }
     M5.Lcd.printf("Starting program\n");
-
+    
+    //start the motors at the maximum frequency and amplitude values, which is the starting point of the process
     updateMotor(Frequency, Fmotor);
     updateMotor(Amplitude, Amotor);
 
     delay(5000);
 
-    //wait until the heartrate reaches above 210, which is the correct value for the maximum stress
+    //wait until the heartrate reaches above 210, at which point the heartbeat corresponds to the maximum stress value
+    //at maximum stress value, the system can start calming down the baby
     while(oldHB < 210) {
       oldHB = getHeartRate();
     }
@@ -225,6 +227,8 @@ void loop(){    //main program loop
             while(1) {
               clearScreen();
               M5.Lcd.printf("Program complete!\nPress button 3 to restart\n");
+              
+              //when the program is finished, wait until the button is pressed to go through the path again, but using the path saved in the arrays
               while(!M5.BtnC.read()) {
                 delay(10);
               }
@@ -235,14 +239,16 @@ void loop(){    //main program loop
         }
     }
 
+    //update the motors for the changed frequency and/or amplitude
     updateMotor(Frequency, Fmotor);
     updateMotor(Amplitude, Amotor);
 
-    if (Frequency > 10) {
+    if (Frequency > 10) {   //get a new heartrate value if frequency is above the minimum value
       delay(timedelay);
       newHB = getHeartRate();
 
-      if (newHB > (oldHB - 10)) {
+      if (newHB > (oldHB - 10)) {   //if the new heartbeat isn't significantly lower than the old one, the wrong path was taken
+                                    //thus the system must go back a step and i.e. reduce frequency instead of amplitude
         if (M5.Lcd.getCursorY() > 222) clearScreen();
         M5.Lcd.printf("New Heartbeat is %.0f, Old was %.0f\n", newHB, oldHB);
         M5.Lcd.printf("Wrong path taken, going back\n");
@@ -251,10 +257,10 @@ void loop(){    //main program loop
         delay(500);
         Frequency = Frequency - 20;
         updateMotor(Frequency, Fmotor);
-        savePath();
+        savePath();     //save the correct step in the path arrays
       
         delay(timedelay);
-        newHB = getHeartRate();
+        newHB = getHeartRate();     //get a new heartrate value with the correct step taken after an incorrect one
       } else {
         if (M5.Lcd.getCursorY() > 222) clearScreen();
         M5.Lcd.printf("New Heartbeat is %.0f, Old was %.0f\n", newHB, oldHB);
