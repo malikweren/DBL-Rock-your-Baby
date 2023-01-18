@@ -262,15 +262,16 @@ void loop(){    //main program loop
         delay(timedelay);
         newHB = getHeartRate();     //get a new heartrate value with the correct step taken after an incorrect one
       } else {
-        if (M5.Lcd.getCursorY() > 222) clearScreen();
+        if (M5.Lcd.getCursorY() > 222) clearScreen();   //if the new heartrate is significantly lower than the previous value,
+                                                        //save the path and restart the loop
         M5.Lcd.printf("New Heartbeat is %.0f, Old was %.0f\n", newHB, oldHB);
         M5.Lcd.printf("Correct path taken, continuing\n");
         savePath();
       }
-   } else {
+   } else {   //if frequency is at it's lowest value, don't check the heartbeat, but just reduce amplitude with a slight time delay in between steps
     delay(timedelay/3);
    }
 
-    oldHB = newHB;
+    oldHB = newHB;    //set the current heartbeat value as the old heartbeat value as the loop is repeated
 
 }
